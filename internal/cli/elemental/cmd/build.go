@@ -28,6 +28,7 @@ type BuildFlags struct {
 	Architecture string
 	ConfigDir    string
 	OutputPath   string
+	Local        bool
 }
 
 var BuildArgs BuildFlags
@@ -63,6 +64,11 @@ func NewBuildCommand(appName string, action func(*cli.Context) error) *cli.Comma
 				Usage:       "Filepath for the output image",
 				Destination: &BuildArgs.OutputPath,
 				DefaultText: "image-<timestamp>.<image-type>",
+			},
+			&cli.BoolFlag{
+				Name:        "local",
+				Usage:       "Use local oci images",
+				Destination: &BuildArgs.Local,
 			},
 		},
 	}

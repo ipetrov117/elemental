@@ -20,7 +20,10 @@ package action
 import (
 	"fmt"
 	"os"
+	"os/signal"
+	"path/filepath"
 	"slices"
+	"syscall"
 	"time"
 
 	"github.com/suse/elemental/v3/internal/build"
@@ -38,25 +41,37 @@ func Build(ctx *cli.Context) error {
 	}
 	logger := ctx.App.Metadata["logger"].(log.Logger)
 
-	logger.Info("Validating input args")
+	ctxCancel, stop := signal.NotifyContext(ctx.Context, syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
 
+	logger.Info("Validating input args")
 	if err := validateArgs(args); err != nil {
 		logger.Error("Input args are invalid")
 		return err
 	}
 
 	logger.Info("Reading image configuration")
-
 	definition, err := parseImageDefinition(args)
 	if err != nil {
 		logger.Error("Parsing image configuration failed")
 		return err
 	}
 
+	buildPath, err := generateBuildDir(args.ConfigDir)
+	if err != nil {
+		logger.Error("Generating build directory")
+		return err
+	}
+
+	absBuildPath, err := filepath.Abs(buildPath)
+	if err != nil {
+		logger.Error("Generating absolute path for build directory")
+		return err
+	}
+
 	logger.Info("Validated image configuration")
 	logger.Info("Starting build process for %s %s image", definition.Image.Arch, definition.Image.ImageType)
-
-	if err = build.Run(definition, logger); err != nil {
+	if err = build.Run(ctxCancel, definition, absBuildPath, logger, args.Local); err != nil {
 		logger.Error("Build process failed")
 		return err
 	}
@@ -88,7 +103,8 @@ func validateArgs(args *cmd.BuildFlags) error {
 func parseImageDefinition(args *cmd.BuildFlags) (*image.Definition, error) {
 	outputPath := args.OutputPath
 	if outputPath == "" {
-		outputPath = fmt.Sprintf("image-%s.%s", time.Now().UTC().Format("2006-01-02T15-04-05"), args.ImageType)
+		imageName := fmt.Sprintf("image-%s.%s", time.Now().UTC().Format("2006-01-02T15-04-05"), args.ImageType)
+		outputPath = filepath.Join(args.ConfigDir, imageName)
 	}
 
 	definition := &image.Definition{
@@ -129,4 +145,18 @@ func parseImageDefinition(args *cmd.BuildFlags) (*image.Definition, error) {
 	}
 
 	return definition, nil
+}
+
+func generateBuildDir(configDir string) (path string, err error) {
+	rootBuildDir := generateRootBuildPath(configDir)
+	buildDirName := fmt.Sprintf("build-%s", time.Now().UTC().Format("2006-01-02T15-04-05"))
+	buildDirPath := filepath.Join(rootBuildDir, buildDirName)
+	if err := os.MkdirAll(buildDirPath, os.ModeDir); err != nil {
+		return "", fmt.Errorf("creating build directory '%s': %w", buildDirName, err)
+	}
+	return buildDirPath, nil
+}
+
+func generateRootBuildPath(configDir string) string {
+	return filepath.Join(configDir, "build")
 }
