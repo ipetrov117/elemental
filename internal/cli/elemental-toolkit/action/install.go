@@ -43,7 +43,7 @@ func Install(ctx *cli.Context) error { //nolint:dupl
 
 	s.Logger().Info("Starting install action with args: %+v", args)
 
-	d, err := digestInstallSetup(s, args)
+	d, err := DigestInstallSetup(s, args)
 	if err != nil {
 		s.Logger().Error("failed to collect installation setup: %v", err)
 		return err
@@ -73,7 +73,7 @@ func Install(ctx *cli.Context) error { //nolint:dupl
 	return nil
 }
 
-func digestInstallSetup(s *sys.System, flags *cmd.InstallFlags) (*deployment.Deployment, error) {
+func DigestInstallSetup(s *sys.System, flags *cmd.InstallFlags) (*deployment.Deployment, error) {
 	d := deployment.DefaultDeployment()
 	if flags.Description != "" {
 		if ok, _ := vfs.Exists(s.FS(), flags.Description); !ok {
