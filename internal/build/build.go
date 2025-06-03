@@ -62,9 +62,6 @@ func Run(ctx context.Context, d *image.Definition, buildDir string, l log.Logger
 		return err
 	}
 
-	fmt.Println("MANIFEST_C: ", m.CorePlatform)
-	fmt.Println("MANIFEST_P: ", m.ProductExtension)
-
 	// SCRIPT
 	scriptPath, err := writeConfigScript(d, buildDir)
 	if err != nil {
@@ -157,12 +154,6 @@ func Run(ctx context.Context, d *image.Definition, buildDir string, l log.Logger
 		return err
 	}
 
-	fmt.Println("FULL: ", dep)
-	fmt.Println("IMG_SRC: ", dep.SourceOS.String())
-	fmt.Println("DEVICE: ", dep.Disks[0].Device)
-	fmt.Println("CONFIG_SCRIPT: ", dep.CfgScript)
-	fmt.Println("OVERLAYS: ", dep.OverlayTree.String())
-
 	// ACTUAL INSTALL
 	manager := firmware.NewEfiBootManager(s)
 	installer := install.New(ctx, s, install.WithBootManager(manager))
@@ -210,9 +201,11 @@ func resolveManifest(manifestURI, storeDir string) (*resolver.ResolvedManifest, 
 
 func writeConfigScript(d *image.Definition, dest string) (path string, err error) {
 	values := struct {
-		Users []image.User
+		Users     []image.User
+		Manifests []string
 	}{
-		Users: d.OperatingSystem.Users,
+		Users:     d.OperatingSystem.Users,
+		Manifests: d.Kubernetes.Manifests,
 	}
 
 	data, err := template.Parse(configScriptName, configScriptTpl, &values)

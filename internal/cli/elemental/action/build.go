@@ -144,6 +144,15 @@ func parseImageDefinition(args *cmd.BuildFlags) (*image.Definition, error) {
 		return nil, fmt.Errorf("parsing config file %q: %w", configDir.ReleaseFilepath(), err)
 	}
 
+	data, err = os.ReadFile(configDir.K8sFilepath())
+	if err != nil {
+		return nil, fmt.Errorf("reading config file: %w", err)
+	}
+
+	if err = image.ParseConfig(data, &definition.Kubernetes); err != nil {
+		return nil, fmt.Errorf("parsing config file %q: %w", configDir.K8sFilepath(), err)
+	}
+
 	return definition, nil
 }
 

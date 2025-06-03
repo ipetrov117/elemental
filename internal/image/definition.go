@@ -48,6 +48,7 @@ type Definition struct {
 	Installation    Installation
 	OperatingSystem OperatingSystem
 	Release         Release
+	Kubernetes      Kubernetes
 }
 
 type Image struct {
@@ -85,4 +86,8 @@ type Release struct {
 	// OperatingSystemImage string `yaml:"osImage"`
 	Name        string `yaml:"name,omitempty"`
 	ManifestURI string `yaml:"manifestURI"`
+}
+
+type Kubernetes struct {
+	Manifests []string `yaml:"manifests"`
 }

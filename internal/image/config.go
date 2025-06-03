@@ -34,6 +34,10 @@ func (dir ConfigDir) OSFilepath() string {
 	return filepath.Join(string(dir), "os.yaml")
 }
 
+func (dir ConfigDir) K8sFilepath() string {
+	return filepath.Join(string(dir), "kubernetes.yaml")
+}
+
 func (dir ConfigDir) ReleaseFilepath() string {
 	return filepath.Join(string(dir), "release.yaml")
 }
