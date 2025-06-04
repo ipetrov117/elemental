@@ -38,6 +38,7 @@ import (
 	"github.com/suse/elemental/v3/pkg/firmware"
 	"github.com/suse/elemental/v3/pkg/install"
 	"github.com/suse/elemental/v3/pkg/log"
+	"github.com/suse/elemental/v3/pkg/manifest/api"
 	"github.com/suse/elemental/v3/pkg/manifest/resolver"
 	"github.com/suse/elemental/v3/pkg/manifest/source"
 	"github.com/suse/elemental/v3/pkg/sys"
@@ -62,8 +63,16 @@ func Run(ctx context.Context, d *image.Definition, buildDir string, l log.Logger
 		return err
 	}
 
+	// Setup Helm chart overlays directory
+	installOverlaysPath := filepath.Join(buildDir, "overlays")
+	paths, err := setupHelmCharts(&d.Kubernetes.Helm, m, installOverlaysPath)
+	if err != nil {
+		l.Error("Setting up HelmChart resources")
+		return err
+	}
+
 	// SCRIPT
-	scriptPath, err := writeConfigScript(d, buildDir)
+	scriptPath, err := writeConfigScript(d, buildDir, paths)
 	if err != nil {
 		l.Error("Preparing configuration script")
 		return err
@@ -84,7 +93,6 @@ func Run(ctx context.Context, d *image.Definition, buildDir string, l log.Logger
 	}
 
 	// OVERLAY setup
-	installOverlaysPath := filepath.Join(buildDir, "overlays")
 	if err := addRKE2ToOverlays(m.CorePlatform.Components.Kubernetes.RKE2.Image, installOverlaysPath); err != nil {
 		l.Error("Preparing RKE2 extension")
 		return err
@@ -199,13 +207,13 @@ func resolveManifest(manifestURI, storeDir string) (*resolver.ResolvedManifest, 
 	return m, nil
 }
 
-func writeConfigScript(d *image.Definition, dest string) (path string, err error) {
+func writeConfigScript(d *image.Definition, dest string, chartPaths []string) (path string, err error) {
 	values := struct {
 		Users     []image.User
 		Manifests []string
 	}{
 		Users:     d.OperatingSystem.Users,
-		Manifests: d.Kubernetes.Manifests,
+		Manifests: append(d.Kubernetes.Manifests, chartPaths...),
 	}
 
 	data, err := template.Parse(configScriptName, configScriptTpl, &values)
@@ -370,4 +378,42 @@ func tar(run sys.Runner, tarPath, rootDir string) error {
 	}
 
 	return nil
+}
+
+func setupHelmCharts(helm *api.Helm, manifest *resolver.ResolvedManifest, overlaysDir string) (helmPaths []string, err error) {
+	pathsAsSeenAfterBoot := []string{}
+	pathAsSeenAfterBoot := filepath.Join("opt", "unified-core", "helm")
+	helmOverlaysPath := filepath.Join(overlaysDir, pathAsSeenAfterBoot)
+	if err := os.MkdirAll(helmOverlaysPath, os.ModeDir); err != nil {
+		return nil, fmt.Errorf("setting up extensions directory '%s': %w", helmOverlaysPath, err)
+	}
+
+	coreChartNames, err := WriteHelmCharts(ProduceCRDs(manifest.CorePlatform.Components.Helm), helmOverlaysPath)
+	if err != nil {
+		return nil, fmt.Errorf("writing core helm chart resources to %s: %w", helmOverlaysPath, err)
+	}
+
+	for _, name := range coreChartNames {
+		pathsAsSeenAfterBoot = append(pathsAsSeenAfterBoot, filepath.Join(string(os.PathSeparator), pathAsSeenAfterBoot, name))
+	}
+
+	prodChartNames, err := WriteHelmCharts(ProduceCRDs(manifest.ProductExtension.Components.Helm), helmOverlaysPath)
+	if err != nil {
+		return nil, fmt.Errorf("writing product helm chart resources to %s: %w", helmOverlaysPath, err)
+	}
+
+	for _, name := range prodChartNames {
+		pathsAsSeenAfterBoot = append(pathsAsSeenAfterBoot, filepath.Join(string(os.PathSeparator), pathAsSeenAfterBoot, name))
+	}
+
+	names, err := WriteHelmCharts(ProduceCRDs(helm), helmOverlaysPath)
+	if err != nil {
+		return nil, fmt.Errorf("writing user helm chart resources to %s: %w", helmOverlaysPath, err)
+	}
+
+	for _, name := range names {
+		pathsAsSeenAfterBoot = append(pathsAsSeenAfterBoot, filepath.Join(string(os.PathSeparator), pathAsSeenAfterBoot, name))
+	}
+
+	return pathsAsSeenAfterBoot, nil
 }

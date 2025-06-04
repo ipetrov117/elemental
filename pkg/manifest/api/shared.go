@@ -25,16 +25,16 @@ type MetaData struct {
 }
 
 type Helm struct {
-	Charts     []HelmChart  `yaml:"charts"`
-	Repository []Repository `yaml:"repository"`
+	Charts       []HelmChart  `yaml:"charts"`
+	Repositories []Repository `yaml:"repositories"`
 }
 
 type HelmChart struct {
 	Name       string       `yaml:"name,omitempty"`
 	Chart      string       `yaml:"chart"`
-	Version    string       `yaml:"version"`
+	Version    string       `yaml:"version,omitempty"`
 	Namespace  string       `yaml:"namespace,omitempty"`
-	Repository string       `yaml:"repository"`
+	Repository string       `yaml:"repository,omitempty"`
 	Values     string       `yaml:"values,omitempty"`
 	DependsOn  []string     `yaml:"dependsOn,omitempty"`
 	Images     []ChartImage `yaml:"images,omitempty"`

@@ -20,6 +20,8 @@ package image
 import (
 	"fmt"
 	"regexp"
+
+	"github.com/suse/elemental/v3/pkg/manifest/api"
 )
 
 const (
@@ -89,5 +91,25 @@ type Release struct {
 }
 
 type Kubernetes struct {
-	Manifests []string `yaml:"manifests"`
+	Manifests []string `yaml:"manifests,omitempty"`
+	Helm      api.Helm `yaml:"helm,omitempty"`
 }
+
+// type Helm struct {
+// 	Charts []Chart      `yaml:"charts"`
+// 	Repos  []Repository `yaml:"repositories"`
+// }
+
+// type Chart struct {
+// 	Name       string `yaml:"name,omitempty"`
+// 	Chart      string `yaml:"chart"`
+// 	Version    string `yaml:"version"`
+// 	Namespace  string `yaml:"namespace,omitempty"`
+// 	Repository string `yaml:"repository"`
+// 	Values     string `yaml:"values,omitempty"`
+// }
+
+// type Repository struct {
+// 	Name string `yaml:"name"`
+// 	URL  string `yaml:"url"`
+// }
