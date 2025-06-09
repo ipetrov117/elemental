@@ -71,7 +71,7 @@ func Build(ctx *cli.Context) error {
 
 	logger.Info("Validated image configuration")
 	logger.Info("Starting build process for %s %s image", definition.Image.Arch, definition.Image.ImageType)
-	if err = build.Run(ctxCancel, definition, absBuildPath, logger, args.Local); err != nil {
+	if err = build.Run(ctxCancel, definition, absBuildPath, logger, args.Local, image.ConfigDir(args.ConfigDir)); err != nil {
 		logger.Error("Build process failed")
 		return err
 	}

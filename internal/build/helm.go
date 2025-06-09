@@ -1,12 +1,7 @@
 package build
 
 import (
-	"fmt"
-	"os"
-	"path/filepath"
-
 	"github.com/suse/elemental/v3/pkg/manifest/api"
-	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -79,24 +74,4 @@ func ProduceCRDs(helm *api.Helm) []*HelmCRD {
 	}
 
 	return chartCRDs
-}
-
-func WriteHelmCharts(helmCRDs []*HelmCRD, dest string) (names []string, err error) {
-	chartNames := []string{}
-	for _, chart := range helmCRDs {
-		data, err := yaml.Marshal(chart)
-		if err != nil {
-			return nil, fmt.Errorf("marshaling helm chart: %w", err)
-		}
-
-		chartFileName := fmt.Sprintf("%s.yaml", chart.Metadata.Name)
-		chartFilePath := filepath.Join(dest, chartFileName)
-		if err = os.WriteFile(chartFilePath, data, os.FileMode(0o644)); err != nil {
-			return nil, fmt.Errorf("storing helm chart: %w", err)
-		}
-
-		chartNames = append(chartNames, chartFileName)
-	}
-
-	return chartNames, nil
 }

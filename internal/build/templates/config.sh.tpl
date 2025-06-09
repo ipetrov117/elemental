@@ -11,47 +11,39 @@ setupUsers(){
 {{ end }}
 }
 
+setupEnsureSysExtService() {
+  cat <<- END > /etc/systemd/system/ensure-sysext.service
+[Unit]
+BindsTo=systemd-sysext.service
+After=systemd-sysext.service
+DefaultDependencies=no
+# Keep in sync with systemd-sysext.service
+ConditionDirectoryNotEmpty=|/etc/extensions
+ConditionDirectoryNotEmpty=|/run/extensions
+ConditionDirectoryNotEmpty=|/var/lib/extensions
+ConditionDirectoryNotEmpty=|/usr/local/lib/extensions
+ConditionDirectoryNotEmpty=|/usr/lib/extensions
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/systemctl daemon-reload
+ExecStart=/usr/bin/systemctl restart --no-block sockets.target timers.target multi-user.target
+[Install]
+WantedBy=sysinit.target
+END
+}
+
 enableDefaultServices() {
   systemctl enable NetworkManager.service
   systemctl enable systemd-sysext
+
+  setupEnsureSysExtService
+  systemctl enable ensure-sysext.service
 }
 
-setupManifestServiceCleanup() {
-  local manifestDir="$1"
-  cat << EOF > /etc/systemd/system/kubernetes-resources-install-cleanup.service
-[Unit]
-Description=Cleans up kubernetes-resources-install.service and kubernetes-resources-install.timer
-
-[Service]
-Type=oneshot
-RemainAfterExit=no
-Restart=on-failure
-RestartSec=30
-ExecStartPre=/bin/sh -c "systemctl stop kubernetes-resources-install.timer"
-ExecStart=/bin/sh -c "rm -f /etc/systemd/system/kubernetes-resources-install.{timer,service} && systemctl daemon-reload"
-ExecStartPost=/bin/sh -c "rm -rf \"${manifestDir}\""
-EOF
-}
-
-setupManifestInstallTimer() {
-  cat << EOF > /etc/systemd/system/kubernetes-resources-install.timer
-[Unit]
-Description=Kubernetes Resources Install timer
-After=multi-user.target rke2-server.service
-
-[Timer]
-OnBootSec=30s
-AccuracySec=5s
-Persistent=true
-
-[Install]
-WantedBy=timers.target
-EOF
-}
-
+{{- if and .KubernetesDir .ManifestDeployScript }}
 setupManifestsInstallService() {
-  local manifestDir="$1"
-  cat << EOF > /etc/systemd/system/kubernetes-resources-install.service
+  cat << EOF > /etc/systemd/system/k8s-manifest-installer.service
 [Unit]
 Description=Kubernetes Resources Install
 Requires=rke2-server.service
@@ -59,71 +51,27 @@ After=rke2-server.service
 ConditionPathExists=/var/lib/rancher/rke2/bin/kubectl
 ConditionPathExists=/etc/rancher/rke2/rke2.yaml
 
+[Install]
+WantedBy=multi-user.target
+
 [Service]
 Type=oneshot
 TimeoutSec=900
-RemainAfterExit=no
 Restart=on-failure
-RestartSec=30
+RestartSec=60
 ExecStartPre=/bin/sh -c 'until [ "\$(systemctl show -p SubState --value rke2-server.service)" = "running" ]; do sleep 10; done'
-ExecStartPre=cp /var/lib/rancher/rke2/bin/kubectl ${manifestDir}/kubectl
-ExecStart="${manifestDir}/create_manifests.sh"
-ExecStartPost=/bin/sh -c "systemctl start kubernetes-resources-install-cleanup.service"
+ExecStart="{{ .ManifestDeployScript }}"
+ExecStartPost=/bin/sh -c "systemctl disable k8s-manifest-installer.service"
+ExecStartPost=/bin/sh -c "rm -rf /etc/systemd/system/k8s-manifest-installer.service"
+ExecStartPost=/bin/sh -c 'rm -rf "{{ .KubernetesDir }}"'
 EOF
 }
-
-setupManifestCreationScript(){
-  local manifestDir="$1"
-  cat << EOF > "${manifestDir}/create_manifests.sh"
-#!/bin/bash
-
-manifests=(
-{{- range .Manifests }}
-"{{ . }}"
 {{- end }}
-)
 
-failed=false
-for manifest in "\${manifests[@]}"; do
-  output_file="\$(mktemp -p "${manifestDir}" kubectl_out.XXXXXX)"
+setupUsers
+enableDefaultServices
 
-  if ! ${manifestDir}/kubectl create -f "\$manifest" --kubeconfig /etc/rancher/rke2/rke2.yaml >"\$output_file" 2>&1; then
-    if ! grep -q "AlreadyExists" "\$output_file"; then
-      failed=true
-    fi
-  fi
-
-  cat "\$output_file"  # Print the output for visibility
-  rm -f "\$output_file"
-done
-
-if [ "\$failed" = true ]; then
-  exit 1
-fi
-EOF
-
-  chmod +x "${manifestDir}/create_manifests.sh"
-}
-
-createKubernetesManifests() {
-  local manifest_create_dir=/opt/unified-core/manifest-create
-  mkdir -p "${manifest_create_dir}"
-
-  setupManifestCreationScript "${manifest_create_dir}"
-  setupManifestsInstallService "${manifest_create_dir}"
-  setupManifestInstallTimer
-  setupManifestServiceCleanup "${manifest_create_dir}"
-
-  systemctl enable kubernetes-resources-install.timer
-}
-
-main() {
-  setupUsers
-  enableDefaultServices
-
-{{- if .Manifests }}
-  createKubernetesManifests
+{{- if and .KubernetesDir .ManifestDeployScript }}
+setupManifestsInstallService
+systemctl enable k8s-manifest-installer.service
 {{- end }}
-}
-
-main
