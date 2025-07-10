@@ -6,7 +6,7 @@ helm:
       version: "106.0.0+up2.8.5"
       targetNamespace: "neuvector-system"
       repositoryName: "rancher-charts"
-    - chart: "neuvector"
+    - name: "neuvector"
       version: "106.0.0+up2.8.5"
       targetNamespace: "neuvector-system"
       repositoryName: "rancher-charts"
