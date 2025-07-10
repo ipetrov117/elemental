@@ -2,16 +2,14 @@ manifests:
   - https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.31/deploy/local-path-storage.yaml
 helm:
   charts:
-    - chart: "neuvector-crd"
+    - name: "neuvector-crd"
       version: "106.0.0+up2.8.5"
-      namespace: "neuvector-system"
-      repository: "rancher-charts"
+      targetNamespace: "neuvector-system"
+      repositoryName: "rancher-charts"
     - chart: "neuvector"
       version: "106.0.0+up2.8.5"
-      namespace: "neuvector-system"
-      repository: "rancher-charts"
-      dependsOn:
-      - "neuvector-crd"
+      targetNamespace: "neuvector-system"
+      repositoryName: "rancher-charts"
   repositories:
     - name: "rancher-charts"
       url: "https://charts.rancher.io"
