@@ -9,29 +9,33 @@ echo '{{ .Username }}:{{ .Password }}' | chpasswd
 {{ end }}
 
 {{- if .NetworkScript }}
-# Configuring network
 
+# Configuring network
 cat <<- EOF > /etc/systemd/system/first-boot-network.service
 [Unit]
 Description=Configure network on first boot
-Before=first-boot-complete.target
-Wants=first-boot-complete.target
-
-Before=rke2-server.service rke2-agent.service
-
+Before=network-pre.target
+Wants=network-pre.target
+After=basic.target
 ConditionPathExists=!/var/lib/elemental/.network-configuration-attempted
-After=network.target NetworkManager.service
 
 [Service]
 Type=oneshot
-TimeoutStartSec=30
+#TimeoutStartSec=30
 ExecStart={{ .NetworkScript }}
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=basic.target
 EOF
 
 systemctl enable first-boot-network.service
+
+mkdir -p /etc/systemd/system/NetworkManager.service.d
+cat <<- EOF > /etc/systemd/system/NetworkManager.service.d/dependencies.conf
+[Unit]
+Wants=first-boot-network.service
+After=first-boot-network.service
+EOF
 
 {{- end }}
 
