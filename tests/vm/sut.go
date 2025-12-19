@@ -74,7 +74,7 @@ func NewSUT() *SUT {
 	}
 
 	if sshKeyFile = os.Getenv("SSH_KEY"); sshKeyFile == "" {
-		sshKeyFile = "../assets/testkey"
+		sshKeyFile = "../testdata/testkey"
 	}
 
 	// Not useful here to check for a reading error, skip it!
