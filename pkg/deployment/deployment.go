@@ -257,15 +257,37 @@ func LiveKernelCmdline(label string) string {
 	return fmt.Sprintf("root=live:LABEL=%s rd.live.overlay.overlayfs=1", label)
 }
 
+// GetPaths returns a list of rw volume paths.
+func (v RWVolumes) GetPaths() []string {
+	var paths []string
+
+	for _, v := range v {
+		paths = append(paths, v.Path)
+	}
+
+	return paths
+}
+
+// GetSnapshottedVolumes returns a list of snapshotted rw volumes defined in the
+// given partition.
+func (p Partition) GetSnapshottedVolumes() RWVolumes {
+	var volumes RWVolumes
+	for _, rwVol := range p.RWVolumes {
+		if rwVol.Snapshotted {
+			volumes = append(volumes, rwVol)
+		}
+	}
+	return volumes
+}
+
 // GetSnapshottedVolumes returns a list of snapshotted rw volumes defined in the
 // given partitions list.
 func (p Partitions) GetSnapshottedVolumes() RWVolumes {
 	var volumes RWVolumes
 	for _, part := range p {
-		for _, rwVol := range part.RWVolumes {
-			if rwVol.Snapshotted {
-				volumes = append(volumes, rwVol)
-			}
+		snapshots := part.GetSnapshottedVolumes()
+		if len(snapshots) > 0 {
+			volumes = append(volumes, snapshots...)
 		}
 	}
 	return volumes

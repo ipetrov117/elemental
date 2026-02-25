@@ -64,12 +64,14 @@ func Relabel(ctx context.Context, s *sys.System, rootDir string, extraPaths ...s
 
 // ChrootedRelabel relables with setfiles the given root in a chroot env. Additionally after the first
 // chrooted call it runs a non chrooted call to relabel any mountpoint used within the chroot.
-func ChrootedRelabel(ctx context.Context, s *sys.System, rootDir string, bind map[string]string) (err error) {
+func ChrootedRelabel(ctx context.Context, s *sys.System, rootDir string, bind map[string]string, extraPath ...string) (err error) {
 	extraPaths := []string{}
 
 	for _, v := range bind {
 		extraPaths = append(extraPaths, v)
 	}
+
+	extraPaths = append(extraPaths, extraPath...)
 
 	callback := func() error { return Relabel(ctx, s, "/", extraPaths...) }
 	err = chroot.ChrootedCallback(s, rootDir, bind, callback, chroot.WithoutDefaultBinds())
