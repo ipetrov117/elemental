@@ -150,6 +150,31 @@ passwd:
 		Expect(ignition).NotTo(ContainSubstring("Kubernetes Config Installer"))
 	})
 
+	It("Writes custom relabelling file via Ignition", func() {
+		conf := &image.Configuration{}
+		relabelPaths := []string{"/etc", "/root", "/var"}
+		ignitionFile := filepath.Join(output.FirstbootConfigDir(), image.IgnitionFilePath())
+
+		Expect(m.configureIgnition(conf, output, "", "", nil, relabelPaths...)).To(Succeed())
+
+		ok, err := vfs.Exists(system.FS(), ignitionFile)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ok).To(BeTrue())
+
+		ignition, err := system.FS().ReadFile(ignitionFile)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(ignition).To(ContainSubstring("/run/systemd/relabel-extra.d/relabel_paths.relabel"))
+		Expect(ignition).To(ContainSubstring("%2Fetc%0A%2Froot%0A%2Fvar"))
+		Expect(ignition).NotTo(ContainSubstring("merge"))
+		Expect(ignition).NotTo(ContainSubstring("/etc/elemental/extensions.yaml"))
+		Expect(ignition).NotTo(ContainSubstring("Kubernetes Resources Installer"))
+		Expect(ignition).NotTo(ContainSubstring("Kubernetes Config Installer"))
+		Expect(ignition).NotTo(ContainSubstring("Reload systemd units"))
+		Expect(ignition).NotTo(ContainSubstring("Reload kernel modules"))
+		Expect(ignition).NotTo(ContainSubstring("Update linker cache"))
+	})
+
 	It("Fails to translate a butaneConfig with a wrong version or variant", func() {
 		var butane map[string]any
 
