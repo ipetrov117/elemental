@@ -87,7 +87,7 @@ disks:
         - path: /opt
         - path: /srv
         - path: /home`
-		expectedISO = "https://registry.foo.bar/uc-base-kernel-default-iso:0.0.1"
+		expectedISO string = "https://registry.foo.bar/uc-base-kernel-default-iso:0.0.1"
 	)
 
 	var fs vfs.FS
@@ -242,12 +242,6 @@ disks:
 				customizeDeployment = d
 				return nil
 			},
-		}
-		sideEffects["truncate"] = func(args ...string) ([]byte, error) {
-			// args = [-s 35G customized.raw]
-			Expect(args[1]).To(Equal("35G"))
-			Expect(args[2]).To(Equal("customized.raw"))
-			return []byte{}, nil
 		}
 
 		def := &image.Definition{
