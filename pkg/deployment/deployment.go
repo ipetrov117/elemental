@@ -539,6 +539,30 @@ func LiveKernelCmdline(label string) string {
 	return fmt.Sprintf("root=live:LABEL=%s rd.live.overlay.overlayfs=1", label)
 }
 
+func (rw RWVolumes) GetPaths() []string {
+	paths := make([]string, 0, len(rw))
+	for _, vol := range rw {
+		paths = append(paths, vol.Path)
+	}
+
+	return paths
+}
+
+func (p Partition) GetInitrdMountedVolumes() RWVolumes {
+	const initrdMount string = "x-initrd.mount"
+
+	var mountedVols RWVolumes
+	for _, vol := range p.RWVolumes {
+		for _, opt := range vol.MountOpts {
+			if opt == initrdMount {
+				mountedVols = append(mountedVols, vol)
+			}
+		}
+	}
+
+	return mountedVols
+}
+
 // GetSnapshottedVolumes returns a list of snapshotted rw volumes defined in the
 // given partitions list.
 func (p Partitions) GetSnapshottedVolumes() RWVolumes {

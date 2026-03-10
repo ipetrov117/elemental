@@ -75,12 +75,6 @@ func (r *Runner) Run(ctx context.Context, def *image.Definition, output config.O
 		return err
 	}
 
-	logger.Info("Configuring image components")
-	if err := r.ConfigManager.ConfigureComponents(ctx, def.Configuration, rm, output); err != nil {
-		logger.Error("Configuring image components failed")
-		return err
-	}
-
 	containerImage := rm.CorePlatform.Components.OperatingSystem.Image.ISO
 	logger.Info("Extracting ISO from container image %s", containerImage)
 	iso, err := r.FileExtractor.ExtractFrom(containerImage)
@@ -93,6 +87,13 @@ func (r *Runner) Run(ctx context.Context, def *image.Definition, output config.O
 	installerDeployment, err := loadISOInstallDesc(r.System, iso, output.RootPath)
 	if err != nil {
 		logger.Error("Loading ISO install description failed")
+		return err
+	}
+
+	sysPartInitrdRWVolumes := installerDeployment.GetSystemPartition().GetInitrdMountedVolumes().GetPaths()
+	logger.Info("Configuring image components")
+	if err := r.ConfigManager.ConfigureComponents(ctx, def.Configuration, rm, output, sysPartInitrdRWVolumes...); err != nil {
+		logger.Error("Configuring image components failed")
 		return err
 	}
 
