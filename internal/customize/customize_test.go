@@ -29,6 +29,7 @@ import (
 	"github.com/suse/elemental/v3/internal/customize"
 	"github.com/suse/elemental/v3/internal/image"
 	"github.com/suse/elemental/v3/internal/image/install"
+	"github.com/suse/elemental/v3/internal/image/release"
 	"github.com/suse/elemental/v3/pkg/crypto"
 	"github.com/suse/elemental/v3/pkg/deployment"
 	"github.com/suse/elemental/v3/pkg/manifest/api/core"
@@ -119,7 +120,7 @@ disks:
 		customizeRunner = &customize.Runner{
 			System: s,
 			ConfigManager: &configManagerMock{
-				configFunc: func(ctx context.Context, conf *image.Configuration, output config.Output) (*resolver.ResolvedManifest, error) {
+				manifestFunc: func(release *release.Release, output config.Output) (rm *resolver.ResolvedManifest, err error) {
 					return &resolver.ResolvedManifest{
 						CorePlatform: &core.ReleaseManifest{
 							Components: core.Components{
@@ -131,6 +132,9 @@ disks:
 							},
 						},
 					}, nil
+				},
+				configFunc: func(ctx context.Context, conf *image.Configuration, rm *resolver.ResolvedManifest, output config.Output, relabelPaths ...string) error {
+					return nil
 				},
 			},
 			FileExtractor: &fileExtractorMock{
@@ -271,15 +275,30 @@ disks:
 	})
 
 	It("fails to configure components", func() {
+		By("failing with a manifest error")
 		customizeRunner.ConfigManager = &configManagerMock{
-			configFunc: func(ctx context.Context, conf *image.Configuration, output config.Output) (*resolver.ResolvedManifest, error) {
+			manifestFunc: func(release *release.Release, output config.Output) (rm *resolver.ResolvedManifest, err error) {
 				return nil, fmt.Errorf("missing manifest")
 			},
 		}
 
-		err := customizeRunner.Run(context.Background(), &image.Definition{}, output)
+		err := customizeRunner.Run(context.Background(), &image.Definition{Configuration: &image.Configuration{}}, output)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(Equal("missing manifest"))
+
+		By("failing with a configuration error")
+		customizeRunner.ConfigManager = &configManagerMock{
+			manifestFunc: func(release *release.Release, output config.Output) (rm *resolver.ResolvedManifest, err error) {
+				return &resolver.ResolvedManifest{}, nil
+			},
+			configFunc: func(ctx context.Context, conf *image.Configuration, rm *resolver.ResolvedManifest, output config.Output, relabelPaths ...string) error {
+				return fmt.Errorf("configuration error")
+			},
+		}
+
+		err = customizeRunner.Run(context.Background(), &image.Definition{Configuration: &image.Configuration{}}, output)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(Equal("configuration error"))
 	})
 
 	It("fails to extract iso from container", func() {
@@ -289,7 +308,7 @@ disks:
 			},
 		}
 
-		err := customizeRunner.Run(context.Background(), &image.Definition{}, output)
+		err := customizeRunner.Run(context.Background(), &image.Definition{Configuration: &image.Configuration{}}, output)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(Equal("extract error"))
 	})
@@ -305,7 +324,7 @@ disks:
 			},
 		}
 
-		err := customizeRunner.Run(context.Background(), &image.Definition{}, output)
+		err := customizeRunner.Run(context.Background(), &image.Definition{Configuration: &image.Configuration{}}, output)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("'missing.iso': xorriso command failed"))
 	})
@@ -315,6 +334,7 @@ disks:
 			Image: image.Image{
 				ImageType: "foo",
 			},
+			Configuration: &image.Configuration{},
 		}
 
 		err := customizeRunner.Run(context.Background(), def, output)
@@ -385,12 +405,21 @@ disks:
 })
 
 type configManagerMock struct {
-	configFunc func(ctx context.Context, conf *image.Configuration, output config.Output) (*resolver.ResolvedManifest, error)
+	configFunc   func(ctx context.Context, conf *image.Configuration, rm *resolver.ResolvedManifest, output config.Output, relabelPaths ...string) error
+	manifestFunc func(release *release.Release, output config.Output) (rm *resolver.ResolvedManifest, err error)
 }
 
-func (c *configManagerMock) ConfigureComponents(ctx context.Context, conf *image.Configuration, output config.Output) (*resolver.ResolvedManifest, error) {
+func (c *configManagerMock) ConfigureComponents(ctx context.Context, conf *image.Configuration, rm *resolver.ResolvedManifest, output config.Output, relabelPaths ...string) error {
 	if c.configFunc != nil {
-		return c.configFunc(ctx, conf, output)
+		return c.configFunc(ctx, conf, rm, output, relabelPaths...)
+	}
+
+	panic("not implemented")
+}
+
+func (c *configManagerMock) GetReleaseManifest(release *release.Release, output config.Output) (rm *resolver.ResolvedManifest, err error) {
+	if c.manifestFunc != nil {
+		return c.manifestFunc(release, output)
 	}
 
 	panic("not implemented")

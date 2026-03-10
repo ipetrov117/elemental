@@ -28,6 +28,7 @@ import (
 	"github.com/suse/elemental/v3/internal/config"
 	"github.com/suse/elemental/v3/internal/image"
 	"github.com/suse/elemental/v3/internal/image/install"
+	"github.com/suse/elemental/v3/internal/image/release"
 	"github.com/suse/elemental/v3/internal/template"
 	"github.com/suse/elemental/v3/pkg/deployment"
 	"github.com/suse/elemental/v3/pkg/fips"
@@ -45,7 +46,8 @@ const (
 var autoInstallerScriptTpl string
 
 type configManager interface {
-	ConfigureComponents(ctx context.Context, conf *image.Configuration, output config.Output) (*resolver.ResolvedManifest, error)
+	ConfigureComponents(ctx context.Context, conf *image.Configuration, rm *resolver.ResolvedManifest, output config.Output, relabelPaths ...string) error
+	GetReleaseManifest(release *release.Release, output config.Output) (rm *resolver.ResolvedManifest, err error)
 }
 
 type ociFileExtractor interface {
@@ -66,9 +68,15 @@ type Runner struct {
 func (r *Runner) Run(ctx context.Context, def *image.Definition, output config.Output) (err error) {
 	logger := r.System.Logger()
 
-	logger.Info("Configuring image components")
-	rm, err := r.ConfigManager.ConfigureComponents(ctx, def.Configuration, output)
+	logger.Info("Retrieving Release Manifest")
+	rm, err := r.ConfigManager.GetReleaseManifest(&def.Configuration.Release, output)
 	if err != nil {
+		logger.Error("Retrieving Release Manifest failed")
+		return err
+	}
+
+	logger.Info("Configuring image components")
+	if err := r.ConfigManager.ConfigureComponents(ctx, def.Configuration, rm, output); err != nil {
 		logger.Error("Configuring image components failed")
 		return err
 	}
