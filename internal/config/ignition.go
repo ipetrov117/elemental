@@ -21,6 +21,7 @@ import (
 	_ "embed"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/coreos/butane/base/v0_6"
 	"github.com/coreos/ignition/v2/config/util"
@@ -41,6 +42,7 @@ const (
 	updateLinkerCacheUnitName   = "update-linker-cache.service"
 	k8sResourcesUnitName        = "k8s-resource-installer.service"
 	k8sConfigUnitName           = "k8s-config-installer.service"
+	relabelFileName             = "relabel_paths.relabel"
 )
 
 var (
@@ -67,11 +69,12 @@ var (
 // * Predefined Butane configuration
 // * Kubernetes configuration and deployment files
 // * Systemd extensions
-func (m *Manager) configureIgnition(conf *image.Configuration, output Output, k8sScript, k8sConfScript string, ext []api.SystemdExtension) error {
+func (m *Manager) configureIgnition(conf *image.Configuration, output Output, k8sScript, k8sConfScript string, ext []api.SystemdExtension, relabelPaths ...string) error {
 	if len(conf.ButaneConfig) == 0 &&
 		k8sScript == "" &&
 		k8sConfScript == "" &&
-		len(ext) == 0 {
+		len(ext) == 0 &&
+		len(relabelPaths) == 0 {
 		m.system.Logger().Info("No ignition configuration required")
 		return nil
 	}
@@ -139,6 +142,15 @@ func (m *Manager) configureIgnition(conf *image.Configuration, output Output, k8
 		config.AddSystemdUnit(ensureSysextUnitName, ensureSysextUnit, true)
 		config.AddSystemdUnit(reloadKernelModulesUnitName, reloadKernelModulesUnit, true)
 		config.AddSystemdUnit(updateLinkerCacheUnitName, updateLinkerCacheUnit, true)
+	}
+
+	if len(relabelPaths) > 0 {
+		config.Storage.Files = append(config.Storage.Files, v0_6.File{
+			Path: filepath.Join("/", "run", "systemd", "relabel-extra.d", relabelFileName),
+			Contents: v0_6.Resource{
+				Inline: util.StrToPtr(strings.Join(relabelPaths, "\n")),
+			},
+		})
 	}
 
 	ignitionFile := filepath.Join(output.FirstbootConfigDir(), image.IgnitionFilePath())

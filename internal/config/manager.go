@@ -129,7 +129,7 @@ func (m *Manager) ConfigureComponents(ctx context.Context, conf *image.Configura
 		}
 	}
 
-	return m.configureIgnition(conf, output, k8sScript, k8sConfScript, extensions)
+	return m.configureIgnition(conf, output, k8sScript, k8sConfScript, extensions, relabelPaths...)
 }
 
 func defaultManifestResolver(fs vfs.FS, out Output, local bool) (res *resolver.Resolver, err error) {
