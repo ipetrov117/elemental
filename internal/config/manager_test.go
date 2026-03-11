@@ -57,7 +57,6 @@ var _ = Describe("Manager", func() {
 	var cleanup func()
 	var err error
 	var system *sys.System
-	var defaultHelmFunc func(c *image.Configuration, rm *resolver.ResolvedManifest) ([]string, error)
 	var defaultResolveFunc func(uri string) (*resolver.ResolvedManifest, error)
 	var butaneConfigString = `
 version: 1.6.0
@@ -130,10 +129,6 @@ passwd:
 		)
 		Expect(err).ToNot(HaveOccurred())
 
-		defaultHelmFunc = func(c *image.Configuration, rm *resolver.ResolvedManifest) ([]string, error) {
-			return nil, nil
-		}
-
 		defaultResolveFunc = func(uri string) (*resolver.ResolvedManifest, error) {
 			return nil, nil
 		}
@@ -203,10 +198,7 @@ passwd:
 
 	It("Fails to resolve release manifest during configuration", func() {
 		By("Using default manifest resolver")
-		m := NewManager(
-			system,
-			&helmConfiguratorMock{configureFunc: defaultHelmFunc},
-		)
+		m := NewManager(system, nil)
 		conf := &image.Configuration{
 			Release: release.Release{
 				ManifestURI: "missing",
@@ -221,7 +213,7 @@ passwd:
 		By("Using custom manifest resolver")
 		m = NewManager(
 			system,
-			&helmConfiguratorMock{configureFunc: defaultHelmFunc},
+			nil,
 			WithManifestResolver(&resolverMock{resolveFunc: func(uri string) (*resolver.ResolvedManifest, error) {
 				return nil, fmt.Errorf("unable to resolve manifest")
 			}}),
@@ -241,7 +233,7 @@ passwd:
 	It("Fails to configure network", func() {
 		m := NewManager(
 			system,
-			&helmConfiguratorMock{configureFunc: defaultHelmFunc},
+			nil,
 			WithManifestResolver(&resolverMock{resolveFunc: defaultResolveFunc}),
 		)
 		conf := &image.Configuration{
@@ -297,7 +289,7 @@ passwd:
 		By("Failing to setup remote Kubernetes manfifests")
 		m = NewManager(
 			system,
-			&helmConfiguratorMock{configureFunc: defaultHelmFunc},
+			nil,
 			WithManifestResolver(&resolverMock{resolveFunc: defaultResolveFunc}),
 			WithDownloadFunc(func(ctx context.Context, fs vfs.FS, url, path string) error {
 				return fmt.Errorf("download unavailable")
@@ -322,7 +314,7 @@ passwd:
 
 		m := NewManager(
 			system,
-			&helmConfiguratorMock{configureFunc: defaultHelmFunc},
+			nil,
 			WithManifestResolver(&resolverMock{resolveFunc: func(uri string) (*resolver.ResolvedManifest, error) {
 				return &resolver.ResolvedManifest{CorePlatform: &core.ReleaseManifest{}}, nil
 			}}),
@@ -355,7 +347,7 @@ passwd:
 
 		m := NewManager(
 			system,
-			&helmConfiguratorMock{configureFunc: defaultHelmFunc},
+			nil,
 			WithManifestResolver(rMock),
 		)
 
