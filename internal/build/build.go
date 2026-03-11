@@ -40,7 +40,7 @@ import (
 )
 
 type configManager interface {
-	ConfigureComponents(ctx context.Context, conf *image.Configuration, rm *resolver.ResolvedManifest, output config.Output) error
+	ConfigureComponents(ctx context.Context, conf *image.Configuration, rm *resolver.ResolvedManifest, output config.Output, relabelPaths ...string) error
 	GetReleaseManifest(release *release.Release, output config.Output) (rm *resolver.ResolvedManifest, err error)
 }
 

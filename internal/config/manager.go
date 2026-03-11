@@ -104,7 +104,7 @@ func (m *Manager) GetReleaseManifest(release *release.Release, output Output) (r
 
 // ConfigureComponents configures components as seen in the provided configuration and manifest.
 // In addition, the function supports setting extra paths that will be relabelled at boot time.
-func (m *Manager) ConfigureComponents(ctx context.Context, conf *image.Configuration, rm *resolver.ResolvedManifest, output Output) error {
+func (m *Manager) ConfigureComponents(ctx context.Context, conf *image.Configuration, rm *resolver.ResolvedManifest, output Output, relabelPaths ...string) error {
 	if err := m.configureNetworkOnFirstboot(conf, output); err != nil {
 		return fmt.Errorf("configuring network: %w", err)
 	}
