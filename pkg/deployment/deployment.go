@@ -539,6 +539,32 @@ func LiveKernelCmdline(label string) string {
 	return fmt.Sprintf("root=live:LABEL=%s rd.live.overlay.overlayfs=1", label)
 }
 
+// GetPaths returns a list of volume paths as seen in RWVolumes.
+func (rw RWVolumes) GetPaths() []string {
+	paths := make([]string, 0, len(rw))
+	for _, vol := range rw {
+		paths = append(paths, vol.Path)
+	}
+
+	return paths
+}
+
+// GetInitrdMountedVolumes returns a list of RWVolumes that
+// have the 'x-initrd.mount' mount option.
+func (p Partition) GetInitrdMountedVolumes() RWVolumes {
+	const initrdMount string = "x-initrd.mount"
+	mountedVols := make(RWVolumes, 0, len(p.RWVolumes))
+	for _, vol := range p.RWVolumes {
+		for _, opt := range vol.MountOpts {
+			if opt == initrdMount {
+				mountedVols = append(mountedVols, vol)
+			}
+		}
+	}
+
+	return mountedVols
+}
+
 // GetSnapshottedVolumes returns a list of snapshotted rw volumes defined in the
 // given partitions list.
 func (p Partitions) GetSnapshottedVolumes() RWVolumes {
