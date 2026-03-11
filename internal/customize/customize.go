@@ -68,10 +68,10 @@ type Runner struct {
 func (r *Runner) Run(ctx context.Context, def *image.Definition, output config.Output) (err error) {
 	logger := r.System.Logger()
 
-	logger.Info("Configuring image components")
-	rm, err := r.ConfigManager.ConfigureComponents(ctx, def.Configuration, output)
+	logger.Info("Retrieving Release Manifest")
+	rm, err := r.ConfigManager.GetReleaseManifest(&def.Configuration.Release, output)
 	if err != nil {
-		logger.Error("Configuring image components failed")
+		logger.Error("Retrieving Release Manifest failed")
 		return err
 	}
 
@@ -87,6 +87,13 @@ func (r *Runner) Run(ctx context.Context, def *image.Definition, output config.O
 	installerDeployment, err := loadISOInstallDesc(r.System, iso, output.RootPath)
 	if err != nil {
 		logger.Error("Loading ISO install description failed")
+		return err
+	}
+
+	logger.Info("Configuring image components")
+	sysPartInitrdRWVolumes := installerDeployment.GetSystemPartition().GetInitrdMountedVolumes().GetPaths()
+	if err := r.ConfigManager.ConfigureComponents(ctx, def.Configuration, rm, output, sysPartInitrdRWVolumes...); err != nil {
+		logger.Error("Configuring image components failed")
 		return err
 	}
 
