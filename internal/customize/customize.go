@@ -28,6 +28,7 @@ import (
 	"github.com/suse/elemental/v3/internal/config"
 	"github.com/suse/elemental/v3/internal/image"
 	"github.com/suse/elemental/v3/internal/image/install"
+	"github.com/suse/elemental/v3/internal/image/release"
 	"github.com/suse/elemental/v3/internal/template"
 	"github.com/suse/elemental/v3/pkg/deployment"
 	"github.com/suse/elemental/v3/pkg/fips"
@@ -45,7 +46,8 @@ const (
 var autoInstallerScriptTpl string
 
 type configManager interface {
-	ConfigureComponents(ctx context.Context, conf *image.Configuration, output config.Output) (*resolver.ResolvedManifest, error)
+	ConfigureComponents(ctx context.Context, conf *image.Configuration, rm *resolver.ResolvedManifest, output config.Output) error
+	GetReleaseManifest(release *release.Release, output config.Output) (rm *resolver.ResolvedManifest, err error)
 }
 
 type ociFileExtractor interface {

@@ -26,6 +26,7 @@ import (
 	"github.com/suse/elemental/v3/internal/config"
 	"github.com/suse/elemental/v3/internal/image"
 	imginstall "github.com/suse/elemental/v3/internal/image/install"
+	"github.com/suse/elemental/v3/internal/image/release"
 	"github.com/suse/elemental/v3/pkg/bootloader"
 	"github.com/suse/elemental/v3/pkg/deployment"
 	"github.com/suse/elemental/v3/pkg/fips"
@@ -39,7 +40,8 @@ import (
 )
 
 type configManager interface {
-	ConfigureComponents(ctx context.Context, conf *image.Configuration, output config.Output) (*resolver.ResolvedManifest, error)
+	ConfigureComponents(ctx context.Context, conf *image.Configuration, rm *resolver.ResolvedManifest, output config.Output) error
+	GetReleaseManifest(release *release.Release, output config.Output) (rm *resolver.ResolvedManifest, err error)
 }
 
 type Builder struct {
@@ -52,9 +54,15 @@ func (b *Builder) Run(ctx context.Context, d *image.Definition, output config.Ou
 	logger := b.System.Logger()
 	runner := b.System.Runner()
 
-	logger.Info("Configuring image components")
-	rm, err := b.ConfigManager.ConfigureComponents(ctx, d.Configuration, output)
+	logger.Info("Retrieving Release Manifest")
+	rm, err := b.ConfigManager.GetReleaseManifest(&d.Configuration.Release, output)
 	if err != nil {
+		logger.Error("Retrieving Release Manfiest failed")
+		return err
+	}
+
+	logger.Info("Configuring image components")
+	if err := b.ConfigManager.ConfigureComponents(ctx, d.Configuration, rm, output); err != nil {
 		logger.Error("Configuring image components failed")
 		return err
 	}

@@ -57,7 +57,6 @@ var _ = Describe("Manager", func() {
 	var cleanup func()
 	var err error
 	var system *sys.System
-	var defaultResolveFunc func(uri string) (*resolver.ResolvedManifest, error)
 	var butaneConfigString = `
 version: 1.6.0
 variant: fcos
@@ -128,10 +127,6 @@ passwd:
 			sys.WithFS(fs),
 		)
 		Expect(err).ToNot(HaveOccurred())
-
-		defaultResolveFunc = func(uri string) (*resolver.ResolvedManifest, error) {
-			return nil, nil
-		}
 	})
 
 	AfterEach(func() {
@@ -176,11 +171,12 @@ passwd:
 			}),
 		)
 
-		r, err := m.ConfigureComponents(context.Background(), conf, output)
+		rm, err := m.GetReleaseManifest(&conf.Release, output)
 		Expect(err).ToNot(HaveOccurred())
+		Expect(rm).ToNot(BeNil())
+		Expect(rm).To(Equal(activeReleaseManifest))
 
-		Expect(r).ToNot(BeNil())
-		Expect(r).To(Equal(activeReleaseManifest))
+		Expect(m.ConfigureComponents(context.Background(), conf, activeReleaseManifest, output)).ToNot(HaveOccurred())
 
 		_, err = fs.Stat(filepath.Join(output.OverlaysDir(), image.HelmPath(), "bar"))
 		Expect(err).ToNot(HaveOccurred())
@@ -196,7 +192,22 @@ passwd:
 		Expect(err).ToNot(HaveOccurred())
 	})
 
-	It("Fails to resolve release manifest during configuration", func() {
+	It("Successfully resolves release manifest", func() {
+		m := NewManager(
+			system,
+			nil,
+			WithManifestResolver(&resolverMock{resolveFunc: func(uri string) (*resolver.ResolvedManifest, error) {
+				return activeReleaseManifest, nil
+			}}),
+		)
+
+		rm, err := m.GetReleaseManifest(&activeConfig.Release, output)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(rm).ToNot(BeNil())
+		Expect(rm).To(Equal(activeReleaseManifest))
+	})
+
+	It("Fails to resolve release manifest", func() {
 		By("Using default manifest resolver")
 		m := NewManager(system, nil)
 		conf := &image.Configuration{
@@ -205,8 +216,8 @@ passwd:
 			},
 		}
 
-		r, err := m.ConfigureComponents(context.Background(), conf, output)
-		Expect(r).To(BeNil())
+		rm, err := m.GetReleaseManifest(&conf.Release, output)
+		Expect(rm).To(BeNil())
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("/_out/store/release-manifests: no such file or directory"))
 
@@ -224,26 +235,21 @@ passwd:
 			},
 		}
 
-		r, err = m.ConfigureComponents(context.Background(), conf, output)
-		Expect(r).To(BeNil())
+		rm, err = m.GetReleaseManifest(&conf.Release, output)
+		Expect(rm).To(BeNil())
 		Expect(err).To(HaveOccurred())
-		Expect(err).To(MatchError("resolving release manifest at uri 'missing': unable to resolve manifest"))
+		Expect(err).To(MatchError("unable to resolve manifest"))
 	})
 
 	It("Fails to configure network", func() {
-		m := NewManager(
-			system,
-			nil,
-			WithManifestResolver(&resolverMock{resolveFunc: defaultResolveFunc}),
-		)
+		m := NewManager(system, nil)
 		conf := &image.Configuration{
 			Network: image.Network{
 				CustomScript: "/missing/configure-network.sh",
 			},
 		}
 
-		r, err := m.ConfigureComponents(context.Background(), conf, output)
-		Expect(r).To(BeNil())
+		err = m.ConfigureComponents(context.Background(), conf, nil, output)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("/missing/configure-network.sh: no such file or directory"))
 	})
@@ -255,7 +261,6 @@ passwd:
 			&helmConfiguratorMock{configureFunc: func(c *image.Configuration, rm *resolver.ResolvedManifest) ([]string, error) {
 				return nil, fmt.Errorf("unable to configure helm charts")
 			}},
-			WithManifestResolver(&resolverMock{resolveFunc: defaultResolveFunc}),
 		)
 		conf := &image.Configuration{
 			Kubernetes: kubernetes.Kubernetes{
@@ -269,8 +274,7 @@ passwd:
 			},
 		}
 
-		r, err := m.ConfigureComponents(context.Background(), conf, output)
-		Expect(r).To(BeNil())
+		err = m.ConfigureComponents(context.Background(), conf, nil, output)
 		Expect(err).To(HaveOccurred())
 		Expect(err).To(MatchError("configuring kubernetes: configuring helm charts: unable to configure helm charts"))
 
@@ -281,8 +285,7 @@ passwd:
 			},
 		}
 
-		r, err = m.ConfigureComponents(context.Background(), conf, output)
-		Expect(r).To(BeNil())
+		err = m.ConfigureComponents(context.Background(), conf, nil, output)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("/missing/foo.yaml: no such file or directory"))
 
@@ -290,7 +293,6 @@ passwd:
 		m = NewManager(
 			system,
 			nil,
-			WithManifestResolver(&resolverMock{resolveFunc: defaultResolveFunc}),
 			WithDownloadFunc(func(ctx context.Context, fs vfs.FS, url, path string) error {
 				return fmt.Errorf("download unavailable")
 			}),
@@ -301,8 +303,7 @@ passwd:
 			},
 		}
 
-		r, err = m.ConfigureComponents(context.Background(), conf, output)
-		Expect(r).To(BeNil())
+		err = m.ConfigureComponents(context.Background(), conf, nil, output)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("downloading remote Kubernetes manifest 'https://foo.bar/foo.yaml': download unavailable"))
 	})
@@ -312,44 +313,20 @@ passwd:
 		butaneConfigString := "breaking: breaking"
 		Expect(parseAny([]byte(butaneConfigString), &butane)).To(Succeed())
 
-		m := NewManager(
-			system,
-			nil,
-			WithManifestResolver(&resolverMock{resolveFunc: func(uri string) (*resolver.ResolvedManifest, error) {
-				return &resolver.ResolvedManifest{CorePlatform: &core.ReleaseManifest{}}, nil
-			}}),
-		)
+		m := NewManager(system, nil)
 
 		conf := &image.Configuration{
 			ButaneConfig: butane,
 		}
 
-		r, err := m.ConfigureComponents(context.Background(), conf, output)
-		Expect(r).To(BeNil())
+		err = m.ConfigureComponents(context.Background(), conf, activeReleaseManifest, output)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("failed translating Butane config: error parsing variant; must be specified"))
 
 	})
 
 	It("Fails to configure systemd extensions", func() {
-		rMock := &resolverMock{
-			resolveFunc: func(uri string) (*resolver.ResolvedManifest, error) {
-				return &resolver.ResolvedManifest{
-					CorePlatform: &core.ReleaseManifest{
-						Components: core.Components{},
-					},
-					ProductExtension: &product.ReleaseManifest{
-						Components: product.Components{},
-					},
-				}, nil
-			},
-		}
-
-		m := NewManager(
-			system,
-			nil,
-			WithManifestResolver(rMock),
-		)
+		m := NewManager(system, nil)
 
 		conf := &image.Configuration{
 			Release: release.Release{
@@ -361,8 +338,7 @@ passwd:
 			},
 		}
 
-		r, err := m.ConfigureComponents(context.Background(), conf, output)
-		Expect(r).To(BeNil())
+		err = m.ConfigureComponents(context.Background(), conf, activeReleaseManifest, output)
 		Expect(err).To(HaveOccurred())
 		Expect(err).To(MatchError("filtering enabled systemd extensions: requested systemd extension(s) not found: [\"missing\"]"))
 	})

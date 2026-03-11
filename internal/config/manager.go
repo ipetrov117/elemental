@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 
 	"github.com/suse/elemental/v3/internal/image"
+	"github.com/suse/elemental/v3/internal/image/release"
 
 	"github.com/suse/elemental/v3/pkg/extractor"
 	"github.com/suse/elemental/v3/pkg/http"
@@ -88,9 +89,8 @@ func NewManager(sys *sys.System, helm helmConfigurator, opts ...Opts) *Manager {
 	return m
 }
 
-// ConfigureComponents configures the components defined in the provided configuration
-// and returns the resolved release manifest from said configuration.
-func (m *Manager) ConfigureComponents(ctx context.Context, conf *image.Configuration, output Output) (rm *resolver.ResolvedManifest, err error) {
+// GetReleaseManifest resolves a manifest from a given release.
+func (m *Manager) GetReleaseManifest(release *release.Release, output Output) (rm *resolver.ResolvedManifest, err error) {
 	if m.rmResolver == nil {
 		defaultResolver, err := defaultManifestResolver(m.system.FS(), output, m.local)
 		if err != nil {
@@ -99,40 +99,37 @@ func (m *Manager) ConfigureComponents(ctx context.Context, conf *image.Configura
 		m.rmResolver = defaultResolver
 	}
 
-	rm, err = m.rmResolver.Resolve(conf.Release.ManifestURI)
-	if err != nil {
-		return nil, fmt.Errorf("resolving release manifest at uri '%s': %w", conf.Release.ManifestURI, err)
+	return m.rmResolver.Resolve(release.ManifestURI)
+}
+
+// ConfigureComponents configures components as seen in the provided configuration and manifest.
+// In addition, the function supports setting extra paths that will be relabelled at boot time.
+func (m *Manager) ConfigureComponents(ctx context.Context, conf *image.Configuration, rm *resolver.ResolvedManifest, output Output) error {
+	if err := m.configureNetworkOnFirstboot(conf, output); err != nil {
+		return fmt.Errorf("configuring network: %w", err)
 	}
 
-	if err = m.configureNetworkOnFirstboot(conf, output); err != nil {
-		return nil, fmt.Errorf("configuring network: %w", err)
-	}
-
-	if err = m.configureCustomScripts(conf, output); err != nil {
-		return nil, fmt.Errorf("configuring custom scripts: %w", err)
+	if err := m.configureCustomScripts(conf, output); err != nil {
+		return fmt.Errorf("configuring custom scripts: %w", err)
 	}
 
 	k8sScript, k8sConfScript, err := m.configureKubernetes(ctx, conf, rm, output)
 	if err != nil {
-		return nil, fmt.Errorf("configuring kubernetes: %w", err)
+		return fmt.Errorf("configuring kubernetes: %w", err)
 	}
 
 	extensions, err := enabledExtensions(rm, conf, m.system.Logger())
 	if err != nil {
-		return nil, fmt.Errorf("filtering enabled systemd extensions: %w", err)
+		return fmt.Errorf("filtering enabled systemd extensions: %w", err)
 	}
 
 	if len(extensions) != 0 {
 		if err = m.downloadSystemExtensions(ctx, extensions, output); err != nil {
-			return nil, fmt.Errorf("downloading system extensions: %w", err)
+			return fmt.Errorf("downloading system extensions: %w", err)
 		}
 	}
 
-	if err = m.configureIgnition(conf, output, k8sScript, k8sConfScript, extensions); err != nil {
-		return nil, fmt.Errorf("configuring ignition: %w", err)
-	}
-
-	return rm, nil
+	return m.configureIgnition(conf, output, k8sScript, k8sConfScript, extensions)
 }
 
 func defaultManifestResolver(fs vfs.FS, out Output, local bool) (res *resolver.Resolver, err error) {
