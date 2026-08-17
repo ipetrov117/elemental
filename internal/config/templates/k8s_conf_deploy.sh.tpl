@@ -2,6 +2,9 @@
 
 set -uo pipefail
 
+: "${INIT_PATH:={{ .KubernetesDir }}/init.yaml}"
+: "${REGFILE:={{ .KubernetesDir }}/registries.yaml}"
+
 declare -A hosts
 
 {{- range .Nodes }}
@@ -13,22 +16,19 @@ HOSTNAME=$(</etc/hostname)
 [[ -z "${HOSTNAME}" ]] \
   && HOSTNAME=$(</proc/sys/kernel/hostname)
 
-NODETYPE="${hosts[${HOSTNAME}]:-server}"
-CONFIGFILE="{{ .KubernetesDir }}/${NODETYPE}.yaml"
-REGFILE="{{ .KubernetesDir }}/registries.yaml"
-
+init_node=false
 {{- if .InitNode.Hostname }}
-if [[ "${HOSTNAME}" = "{{ .InitNode.Hostname }}" ]]; then
-  echo "Setting up init node"
-  CONFIGFILE={{ .KubernetesDir }}/init.yaml
-fi
+[[ "$HOSTNAME" == "{{ .InitNode.Hostname }}" ]] && init_node=true
 {{- end }}
 
-# Better to append if a file exist
-# Useful if some custom configuration are done at boot
-mkdir -p /etc/rancher/rke2
-echo "Copying RKE2 config file ${CONFIGFILE}"
-cat ${CONFIGFILE} >> /etc/rancher/rke2/config.yaml
+: "${IS_INIT_NODE:=${init_node}}"
+: "${NODETYPE:=${hosts[$HOSTNAME]:-server}}"
+CONFIGFILE="{{ .KubernetesDir }}/${NODETYPE}.yaml"
+[[ "$IS_INIT_NODE" == "true" ]] && CONFIGFILE="$INIT_PATH"
+
+RKE2_CFG_DROP_IN_PATH="/etc/rancher/rke2/config.yaml.d"
+mkdir -p "${RKE2_CFG_DROP_IN_PATH}"
+cp "${CONFIGFILE}" "${RKE2_CFG_DROP_IN_PATH}/00-elemental-base-rke2-config.yaml"
 
 if [[ -e "${REGFILE}" ]]; then
   cp "${REGFILE}" /etc/rancher/rke2/registries.yaml
@@ -54,4 +54,4 @@ if ! sh "{{ .InstallScript }}"; then
   exit 1
 fi
 
-systemctl enable --now rke2-${NODETYPE}.service
+systemctl enable --now "rke2-${NODETYPE}.service"
