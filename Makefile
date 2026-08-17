@@ -59,13 +59,16 @@ endif
 
 # Default target
 .PHONY: all
-all: $(BUILD_DIR)/elemental3 $(BUILD_DIR)/elemental3ctl
+all: $(BUILD_DIR)/elemental3 $(BUILD_DIR)/elemental3ctl $(BUILD_DIR)/elemental3cfg
 
 $(BUILD_DIR):
 	@mkdir -p $(BUILD_DIR)
 
 $(BUILD_DIR)/elemental3: $(GO_FILES)
 	go build $(GO_BUILD_ARGS) -o $@ ./cmd/elemental
+
+$(BUILD_DIR)/elemental3cfg: $(GO_FILES)
+	go build $(GO_BUILD_ARGS) -o $@ ./cmd/elemental3cfg
 
 $(BUILD_DIR)/elemental3ctl: $(GO_FILES)
 	go build $(GO_BUILD_ARGS) -o $@ ./cmd/elemental3ctl
