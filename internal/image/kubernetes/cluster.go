@@ -66,13 +66,14 @@ func NewCluster(s *sys.System, kube *Kubernetes) (*Cluster, error) {
 		return nil, fmt.Errorf("parsing server config: %w", err)
 	}
 
-	if len(kube.Nodes) < 2 {
-		setSingleNodeConfigDefaults(s.Logger(), kube, serverConfig)
-		return &Cluster{
-			ServerConfig:     serverConfig,
-			RegistriesConfig: registriesConfig,
-		}, nil
-	}
+	// TODO (ivpe): Evaluate approach..
+	// if len(kube.Nodes) < 2 {
+	// 	setSingleNodeConfigDefaults(s.Logger(), kube, serverConfig)
+	// 	return &Cluster{
+	// 		ServerConfig:     serverConfig,
+	// 		RegistriesConfig: registriesConfig,
+	// 	}, nil
+	// }
 
 	var ip4 netip.Addr
 	if kube.Network.APIVIP4 != "" {
