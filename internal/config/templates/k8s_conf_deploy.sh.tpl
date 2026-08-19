@@ -2,8 +2,11 @@
 
 set -uo pipefail
 
-: "${INIT_PATH:={{ .KubernetesDir }}/init.yaml}"
-: "${REGFILE:={{ .KubernetesDir }}/registries.yaml}"
+: "${K8S_DIR:={{ .KubernetesDir }}}"
+: "${INIT_PATH:=${K8S_DIR}/init.yaml}"
+: "${CONFIGFILE:=${INIT_PATH}}"
+: "${REGFILE:=${K8S_DIR}/registries.yaml}"
+: "${BASE_CONF_NAME:=00-elemental-base-rke2-config.yaml}"
 
 declare -A hosts
 
@@ -16,19 +19,27 @@ HOSTNAME=$(</etc/hostname)
 [[ -z "${HOSTNAME}" ]] \
   && HOSTNAME=$(</proc/sys/kernel/hostname)
 
-init_node=false
-{{- if .InitNode.Hostname }}
-[[ "$HOSTNAME" == "{{ .InitNode.Hostname }}" ]] && init_node=true
-{{- end }}
+: "${NODETYPE:=${hosts[$HOSTNAME]:-}}"
+[[ -z "${NODETYPE}" ]] && {
+  echo "Error: Undeclared 'NODETYPE' for hostname '${HOSTNAME}'" >&2
+  exit 1
+}
 
-: "${IS_INIT_NODE:=${init_node}}"
-: "${NODETYPE:=${hosts[$HOSTNAME]:-server}}"
-CONFIGFILE="{{ .KubernetesDir }}/${NODETYPE}.yaml"
-[[ "$IS_INIT_NODE" == "true" ]] && CONFIGFILE="$INIT_PATH"
+is_init_node=true
+if [[ "${NODETYPE}" == "agent" ]]; then
+  is_init_node=false
+{{- if .InitNode.Hostname }}
+elif [[ "${HOSTNAME}" != "{{ .InitNode.Hostname }}" ]]; then
+  is_init_node=false
+{{- end }}
+fi
+
+: "${IS_INIT_NODE:=${is_init_node}}"
+[[ "${IS_INIT_NODE}" == "false" ]] && CONFIGFILE="${K8S_DIR}/${NODETYPE}.yaml"
 
 RKE2_CFG_DROP_IN_PATH="/etc/rancher/rke2/config.yaml.d"
 mkdir -p "${RKE2_CFG_DROP_IN_PATH}"
-cp "${CONFIGFILE}" "${RKE2_CFG_DROP_IN_PATH}/00-elemental-base-rke2-config.yaml"
+cp "${CONFIGFILE}" "${RKE2_CFG_DROP_IN_PATH}/${BASE_CONF_NAME}"
 
 if [[ -e "${REGFILE}" ]]; then
   cp "${REGFILE}" /etc/rancher/rke2/registries.yaml
