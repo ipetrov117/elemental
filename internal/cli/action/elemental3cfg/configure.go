@@ -125,7 +125,7 @@ EnvironmentFile=-%s
 		fmt.Sprintf("NODETYPE=%s", rke2.Type),
 	}
 
-	envPath := filepath.Join(image.ElementalPath(), dropInName)
+	envPath := filepath.Join("/", image.ElementalPath(), dropInName)
 	if err := writeFile(envPath, strings.Join(envs, "\n")+"\n"); err != nil {
 		return fmt.Errorf("writing %s env file: %w", dropInName, err)
 	}
@@ -144,7 +144,7 @@ ConditionPathExists=%s
 `
 	)
 
-	initTriggerPath := filepath.Join(image.ElementalPath(), initTrigger)
+	initTriggerPath := filepath.Join("/", image.ElementalPath(), initTrigger)
 	if rke2.Init {
 		if err := writeFile(initTriggerPath, ""); err != nil {
 			return fmt.Errorf("writing init trigger file: %w", err)
