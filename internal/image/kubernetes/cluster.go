@@ -66,35 +66,8 @@ func NewCluster(s *sys.System, kube *Kubernetes) (*Cluster, error) {
 		return nil, fmt.Errorf("parsing server config: %w", err)
 	}
 
-	// TODO (ivpe): Evaluate approach..
-	// if len(kube.Nodes) < 2 {
-	// 	setSingleNodeConfigDefaults(s.Logger(), kube, serverConfig)
-	// 	return &Cluster{
-	// 		ServerConfig:     serverConfig,
-	// 		RegistriesConfig: registriesConfig,
-	// 	}, nil
-	// }
-
-	var ip4 netip.Addr
-	if kube.Network.APIVIP4 != "" {
-		ip4, err = netip.ParseAddr(kube.Network.APIVIP4)
-		if err != nil {
-			return nil, fmt.Errorf("parsing kubernetes ipv4 address: %w", err)
-		}
-	}
-
-	var ip6 netip.Addr
-	if kube.Network.APIVIP6 != "" {
-		ip6, err = netip.ParseAddr(kube.Network.APIVIP6)
-		if err != nil {
-			return nil, fmt.Errorf("parsing kubernetes ipv6 address: %w", err)
-		}
-	}
-
-	prioritizeIPv6 := IsIPv6Priority(serverConfig)
-	err = setMultiNodeConfigDefaults(s.Logger(), kube, serverConfig, ip4, ip6, prioritizeIPv6)
-	if err != nil {
-		return nil, fmt.Errorf("failed setting multi-node configuration: %w", err)
+	if err := setServerDefaults(s.Logger(), kube, serverConfig); err != nil {
+		return nil, fmt.Errorf("setting server default configurations: %w", err)
 	}
 
 	agentConfig, err := ParseKubernetesConfig(s, kube.Config.AgentFilePath)
@@ -103,10 +76,11 @@ func NewCluster(s *sys.System, kube *Kubernetes) (*Cluster, error) {
 	}
 
 	// Ensure the agent uses the same cluster configuration values as the server
-	agentConfig[tokenKey] = serverConfig[tokenKey]
-	agentConfig[serverKey] = serverConfig[serverKey]
-	agentConfig[selinuxKey] = serverConfig[selinuxKey]
-	agentConfig[cniKey] = serverConfig[cniKey]
+	for _, key := range []string{tokenKey, serverKey, selinuxKey, cniKey} {
+		if v, ok := serverConfig[key]; ok {
+			agentConfig[key] = v
+		}
+	}
 
 	initConfig := ConfigMap{}
 	maps.Copy(initConfig, serverConfig)
@@ -149,43 +123,52 @@ func ParseKubernetesConfig(s *sys.System, configFile string) (ConfigMap, error) 
 	return config, nil
 }
 
-func setSingleNodeConfigDefaults(logger log.Logger, kube *Kubernetes, config ConfigMap) {
-	if kube.Network.APIVIP4 != "" {
-		appendClusterTLSSAN(logger, config, kube.Network.APIVIP4)
-	}
-
-	if kube.Network.APIVIP6 != "" {
-		appendClusterTLSSAN(logger, config, kube.Network.APIVIP6)
-	}
-
-	if kube.Network.APIHost != "" {
-		appendClusterTLSSAN(logger, config, kube.Network.APIHost)
-	}
-	delete(config, serverKey)
-}
-
-func setMultiNodeConfigDefaults(logger log.Logger, kube *Kubernetes, config ConfigMap, ip4 netip.Addr, ip6 netip.Addr, prioritizeIPv6 bool) error {
+func setServerDefaults(logger log.Logger, kube *Kubernetes, server ConfigMap) error {
 	const rke2ServerPort = 9345
+	var serverAddr netip.Addr
 
-	err := setClusterAPIAddress(config, ip4, ip6, rke2ServerPort, prioritizeIPv6)
-	if err != nil {
-		return err
-	}
-
-	setClusterToken(logger, config)
+	// Parse VIP IPv4 address. If defined and valid,
+	// append the address to the server's tls-san configuration
+	// and set it as the valid server url address.
 	if kube.Network.APIVIP4 != "" {
-		appendClusterTLSSAN(logger, config, kube.Network.APIVIP4)
+		ip4, err := netip.ParseAddr(kube.Network.APIVIP4)
+		if err != nil {
+			return fmt.Errorf("parsing kubernetes ipv4 address: %w", err)
+		}
+
+		appendClusterTLSSAN(logger, server, kube.Network.APIVIP4)
+		serverAddr = ip4
 	}
 
+	// Parse VIP IPv6 address. If defined and valid,
+	// append the address to the server's tls-san configuraiton.
+	// If IPv6 is prioritiesed, or IPv4 has not been defined, set
+	// it as the valid server url address.
 	if kube.Network.APIVIP6 != "" {
-		appendClusterTLSSAN(logger, config, kube.Network.APIVIP6)
+		ip6, err := netip.ParseAddr(kube.Network.APIVIP6)
+		if err != nil {
+			return fmt.Errorf("parsing kubernetes ipv6 address: %w", err)
+		}
+
+		appendClusterTLSSAN(logger, server, kube.Network.APIVIP6)
+
+		if IsIPv6Priority(server) || kube.Network.APIVIP4 == "" {
+			serverAddr = ip6
+		}
 	}
 
-	setSELinux(config)
+	// Add the cluster domain address to the tls-san, if provided.
 	if kube.Network.APIHost != "" {
-		appendClusterTLSSAN(logger, config, kube.Network.APIHost)
+		appendClusterTLSSAN(logger, server, kube.Network.APIHost)
 	}
 
+	// If the server address exists, use it to construct the server's connection endpoint.
+	// Note: 'serverAddr' will only be empty for standalone cluster scenarios
+	if serverAddr.IsValid() {
+		server[serverKey] = fmt.Sprintf("https://%s", netip.AddrPortFrom(serverAddr, rke2ServerPort).String())
+	}
+
+	setClusterToken(logger, server)
 	return nil
 }
 
@@ -198,29 +181,6 @@ func setClusterToken(logger log.Logger, config ConfigMap) {
 
 	logger.Info("Generated cluster token: %s", token)
 	config[tokenKey] = token
-}
-
-func setClusterAPIAddress(config ConfigMap, ip4 netip.Addr, ip6 netip.Addr, port uint16, prioritizeIPv6 bool) error {
-	if !ip4.IsValid() && !ip6.IsValid() {
-		return fmt.Errorf("attempted to set an invalid cluster API address")
-	}
-
-	if ip6.IsValid() && (prioritizeIPv6 || !ip4.IsValid()) {
-		config[serverKey] = fmt.Sprintf("https://%s", netip.AddrPortFrom(ip6, port).String())
-		return nil
-	}
-
-	config[serverKey] = fmt.Sprintf("https://%s", netip.AddrPortFrom(ip4, port).String())
-
-	return nil
-}
-
-func setSELinux(config ConfigMap) {
-	if _, ok := config[selinuxKey].(bool); ok {
-		return
-	}
-
-	config[selinuxKey] = false
 }
 
 func appendClusterTLSSAN(logger log.Logger, config ConfigMap, address string) {
