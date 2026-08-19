@@ -114,10 +114,11 @@ func writeDropIns(rke2 *RKE2) error {
 func writeElementalK8sConfigDropIn(rke2 *RKE2) error {
 	const (
 		dropInDir     = "/etc/systemd/system/k8s-config-installer.service.d"
-		dropInName    = "runtime.env"
+		dropInName    = "runtime.conf"
 		dropInContent = `[Service]
 EnvironmentFile=-%s
 `
+		envName = "runtime.env"
 	)
 
 	envs := []string{
@@ -125,7 +126,7 @@ EnvironmentFile=-%s
 		fmt.Sprintf("NODETYPE=%s", rke2.Type),
 	}
 
-	envPath := filepath.Join("/", image.ElementalPath(), dropInName)
+	envPath := filepath.Join("/", image.ElementalPath(), envName)
 	if err := writeFile(envPath, strings.Join(envs, "\n")+"\n"); err != nil {
 		return fmt.Errorf("writing %s env file: %w", dropInName, err)
 	}
