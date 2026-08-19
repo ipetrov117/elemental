@@ -66,13 +66,13 @@ func Configure(ctx context.Context, cmd *cli.Command) error {
 
 type RuntimeConfig struct {
 	Hostname string `yaml:"hostname,omitempty"`
-	RKE2     *RKE2  `yaml:"components,omitempty"`
+	RKE2     *RKE2  `yaml:"rke2,omitempty"`
 }
 
 type RKE2 struct {
 	Type   string         `yaml:"type,omitempty"`
 	Init   bool           `yaml:"init,omitempty"`
-	Config map[string]any `yaml:"values,omitempty"`
+	Config map[string]any `yaml:"config,omitempty"`
 }
 
 func parseConfig(path string) (*RuntimeConfig, error) {
