@@ -1,0 +1,14 @@
+[Unit]
+Description=Elemental Node Runtime Configuration
+ConditionFirstBoot=true
+ConditionPathExists=/var/lib/elemental/runtime-data.yaml
+
+[Service]
+Type=oneshot
+TimeoutSec=900
+Restart=on-failure
+RestartSec=60
+ExecStart=/bin/sh -c "/usr/bin/elemental3cfg apply --path /var/lib/elemental/runtime-data.yaml"
+
+[Install]
+WantedBy=multi-user.target
