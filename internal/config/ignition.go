@@ -49,9 +49,6 @@ var (
 
 	//go:embed templates/update-linker-cache.service
 	updateLinkerCacheUnit string
-
-	//go:embed templates/runtime-config-installer.service
-	runtimeConfigInstallerUnit string
 )
 
 // configureSystem writes the Ignition configuration file including:
@@ -92,8 +89,6 @@ func (m *Manager) configureSystem(ctx context.Context, conf *image.Configuration
 			return err
 		}
 	}
-
-	butaneCfg.AddSystemdUnit("runtime-config-installer.service", runtimeConfigInstallerUnit, true)
 
 	if len(ext) > 0 {
 		data, err := extensions.Serialize(ext)
