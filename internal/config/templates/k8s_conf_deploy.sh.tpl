@@ -25,14 +25,10 @@ HOSTNAME=$(</etc/hostname)
   exit 1
 }
 
-is_init_node=true
-if [[ "${NODETYPE}" == "agent" ]]; then
-  is_init_node=false
+is_init_node=false
 {{- if .InitNode.Hostname }}
-elif [[ "${HOSTNAME}" != "{{ .InitNode.Hostname }}" ]]; then
-  is_init_node=false
+[[ "${HOSTNAME}" == "{{ .InitNode.Hostname }}" ]] && is_init_node=true
 {{- end }}
-fi
 
 : "${IS_INIT_NODE:=${is_init_node}}"
 [[ "${IS_INIT_NODE}" == "false" ]] && CONFIGFILE="${K8S_DIR}/${NODETYPE}.yaml"
